@@ -1,32 +1,53 @@
 function datav = normGroup(data, w)
-% normGroup - Normaliza un conjunto de datos almacenados en una celda
-%             y escala cada conjunto de datos según un vector de pesos.
+% normGroup - Group-wise normalization with optional weighting
 %
-% Entradas:
-%   data - Cell array de tamaño Mx1, donde cada celda contiene una matriz (NxD).
-%   w    - Vector de pesos de tamaño Mx1, que define el escalamiento de cada conjunto.
+% This function normalizes multiple datasets stored in a cell array and
+% optionally scales each dataset according to a weighting vector.
+% Each dataset is normalized independently to preserve its internal structure,
+% while the weight vector controls its relative contribution in the
+% concatenated output.
 %
-% Salidas:
-%   datav - Matriz con datos normalizados y escalados, concatenados en columnas.
+% Inputs:
+%   data - Cell array of size Mx1, where each cell contains a matrix (NxD)
+%          representing a dataset.
+%   w    - Weight vector of size Mx1, defining the scaling factor for each
+%          dataset.
+%
+% Output:
+%   datav - Matrix containing the normalized and weighted data, concatenated
+%           column-wise.
+% -------------------------------------------------------------------------
+% Author:       Juliana Manrique-Cordoba
+% Contact:      jmanrique@umh.es
+% ORCID:        0000-0002-0684-8534
+% Repository:   https://github.com/jmanri
+% Created:      22-Jan-2026 (Updated)
+% Reference:    Manrique-Cordoba, J., de la Casa-Lillo, M. Á., & 
+%               Sabater-Navarro, J. M. (2025). N-Dimensional Reduction 
+%               Algorithm for Learning from Demonstration Path Planning. 
+%               Sensors, 25(7), 2145.
+%               DOI: https://doi.org/10.3390/s25072145
+% -------------------------------------------------------------------------
 
-% **Verificación de la entrada `data`**
+% **Input validation for 'data'**
 if ~iscell(data)
     error('ERROR: input data must be a cell array.');
 end
 
-if size(data,2) ~= 1  % Verifica si `data` es un vector columna
+if size(data,2) ~= 1 
+    % Ensure that `data` is provided as a column cell array (Mx1)
     data = data';
     if size(data,2) ~= 1
         error('ERROR: input data values must be a cell array of size Mx1 (M: magnitudes)');
     end
 end
 
-m = size(data,1); % Número de celdas (M)
+m = size(data,1); % Number of data groups (M)
 
-
-% **Verificar que todas las matrices dentro de `data` tengan la misma cantidad de filas**
-l = zeros(m,1); % Vector para almacenar el número de filas de cada matriz
-n = zeros(m,1); % Vector para almacenar el número de columnas de cada matriz
+% **Verify that all matrices inside 'data' have the same number of rows**
+% (i.e., they correspond to the same number of samples)
+l = zeros(m,1);     % Vector storing the number of rows of each matrix
+n = zeros(m,1);     % Vector storing the number of columns of each matrix
 
 for i = 1:m
     if ~ismatrix(data{i}) || isempty(data{i})
@@ -36,16 +57,18 @@ for i = 1:m
     n(i) = size(data{i},2);
 end
 
-if any(l ~= l(1))  % Si hay diferentes tamaños de filas, error
+if any(l ~= l(1))  
+    % All datasets must be aligned sample-wise
     error('ERROR: all matrices inside the cell array must have the same number of rows.');
 end
 
-% **Verificación de la entrada `w` (vector de pesos)**
+% Input validation for 'w' (weight vector)
 if ~isvector(w)
     error('ERROR: weight (w) values must be a vector.');
 end
 
-if size(w,1) ~= m  % Si `w` es fila, transponerlo
+if size(w,1) ~= m 
+    % Convert row vector to column vector if necessary
     w = w';
 end
 
@@ -53,56 +76,33 @@ if size(w,1) ~= m
     error('ERROR: weight (w) values must be a vector of size Mx1.');
 end
 
-
-% Normalizar
-numCells = numel(data);             % Número de celdas en el vector celda
-data_norm = cell(size(data));       % Preasignar celda para datos normalizados
+% Normalization and weighting
+% Each dataset is normalized independently using min–max normalization.
+% The weight w(i) controls the relative influence of each data group
+% in the final concatenated feature matrix.
+numCells    = numel(data);          % Number of cells in the cell array
+data_norm   = cell(size(data));     % Preallocate cell array for normalized data
 
 for i = 1:numCells
-    matrix = double(data{i});  % Convertir a double para evitar problemas
+    matrix = double(data{i});  % Convert to double precision for numerical robustness
 
-    % Encontrar el mínimo y máximo de toda la matriz
+    % Compute global minimum and maximum of the dataset
+    % (normalization is applied per dataset, not per column)
     minVal = min(matrix(:)); 
     maxVal = max(matrix(:));
 
-    % Evitar división por cero si todos los valores son iguales
+    % Avoid division by zero when all values in the dataset are identical
     rangeVal = maxVal - minVal;
     if rangeVal == 0
+        % If the dataset has no variability, return a zero matrix
         data_norm{i} = zeros(size(matrix), 'double'); % Mantener tipo double
     else
+        % Apply min–max normalization followed by scaling using w(i)
         data_norm{i} = ((matrix - minVal) / rangeVal) * w(i); % Escalar por w(i)
     end
 end
 
-% Convertir la celda en una matriz concatenando columnas
+% Concatenate all normalized datasets column-wise to form the final matrix
 datav = cell2mat(data_norm');
 
-% Convertir la celda en una matriz concatenando fila
-% datah = cell2mat(data_norm)';
-
-
-
-% for i=1:1:m
-%     datam = data{i};                    % extraigo los vectores en cada celda para normalizar por grupos
-%     if min(size(datam)) == 1
-%         if not(size(datam,2)==1)
-%             datam = datam';
-%         end
-%     end
-%     datam = datam - min(datam);         % llevo la magnitud a iniciar en el origen
-%     maxdata(i) = max(max(datam));       % calculo el máximo entre todos los máximos de la magnitud
-%     mindata(i) = min(min(datam));       % calculo el mínimo entre todos los mínimos de la magnitud
-%     delta(i) = maxdata(i)-mindata(i);   % calculo la variación total
-% 
-%     wm = w(i);
-% 
-%     mr = wm./delta(i);
-% 
-%     posnorm{i} = (datam-mindata(i)).*mr;
-% end
-% 
-% datav = [];
-% for i=1:1:size(posnorm,2)
-%     datav = [datav posnorm{i}];
-% end
 end
